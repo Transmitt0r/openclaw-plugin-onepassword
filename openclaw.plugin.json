@@ -15,6 +15,11 @@
         "type": "string",
         "description": "Field name within each item to read (default: 'credential')",
         "default": "credential"
+      },
+      "items": {
+        "type": "object",
+        "additionalProperties": { "type": "string" },
+        "description": "Maps a SecretRef id to the real 1Password item name (or item/section/field path). OpenClaw restricts SecretRef ids to letters, digits, and '._:/#-' (no spaces), so item names containing spaces or other disallowed characters need an entry here, e.g. { \"brave-search\": \"Brave search\" }. Ids without an entry are used as the item name verbatim."
       }
     }
   },

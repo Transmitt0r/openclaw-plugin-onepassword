@@ -9,6 +9,11 @@
  * Each SecretRef id maps to a 1Password reference:
  *   op://<vault>/<id>/<field>
  *
+ * OpenClaw restricts SecretRef ids to /^[A-Za-z0-9][A-Za-z0-9._:/#-]{0,255}$/
+ * (no spaces), while 1Password item names commonly contain spaces. When an
+ * item name isn't itself a valid id, map a valid id to the real item name via
+ * config.items (e.g. { "brave-search": "Brave search" }).
+ *
  * Config is injected by the OpenClaw plugin host via environment variable
  * OPENCLAW_PLUGIN_CONFIG as JSON.
  */
@@ -31,6 +36,7 @@ interface ProtocolResponse {
 interface PluginConfig {
   vault: string;
   field: string;
+  items: Record<string, string>;
 }
 
 function loadConfig(): PluginConfig {
@@ -40,7 +46,7 @@ function loadConfig(): PluginConfig {
     process.exit(1);
   }
   try {
-    const config = JSON.parse(raw) as PluginConfig;
+    const config = JSON.parse(raw) as Partial<PluginConfig>;
     if (!config.vault || typeof config.vault !== "string") {
       process.stderr.write("onepassword resolver: config.vault is required\n");
       process.exit(1);
@@ -48,6 +54,7 @@ function loadConfig(): PluginConfig {
     return {
       vault: config.vault,
       field: config.field || "credential",
+      items: config.items && typeof config.items === "object" ? config.items : {},
     };
   } catch (err) {
     process.stderr.write(
@@ -59,17 +66,20 @@ function loadConfig(): PluginConfig {
 
 function buildOpRef(config: PluginConfig, id: string): string {
   const vault = config.vault.startsWith("op://") ? config.vault.slice(5) : config.vault;
-  // The id from the SecretRef can contain slashes (e.g. "OpenAI/credential").
-  // If the id already looks like a full 1Password path (contains a second
-  // segment like "item/section/field"), use it as-is; otherwise append
-  // /<field>.
-  const segments = id.split("/").filter(Boolean);
+  // config.items maps a valid SecretRef id to the real 1Password item name
+  // (needed whenever the item name itself isn't a valid id, e.g. it has
+  // spaces). Falls back to using the id verbatim as the item name/path.
+  const target = config.items[id] ?? id;
+  // The target can contain slashes (e.g. "OpenAI/credential"). If it already
+  // looks like a full 1Password path (contains a second segment like
+  // "item/section/field"), use it as-is; otherwise append /<field>.
+  const segments = target.split("/").filter(Boolean);
   if (segments.length >= 2) {
-    // id already includes item and section/field — use directly
-    return `op://${vault}/${id}`;
+    // target already includes item and section/field — use directly
+    return `op://${vault}/${target}`;
   }
-  // id is just the item name — append config.field
-  return `op://${vault}/${id}/${config.field}`;
+  // target is just the item name — append config.field
+  return `op://${vault}/${target}/${config.field}`;
 }
 
 function readStdinSync(): string {

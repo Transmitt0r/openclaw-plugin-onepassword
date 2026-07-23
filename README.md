@@ -35,6 +35,14 @@ Verify with `op whoami` from the gateway host.
         config: {
           vault: "Openclaw",  // 1Password vault name
           // field: "credential"  // default, omit unless you use a different field name
+          items: {
+            // OpenClaw SecretRef ids may only contain letters, digits, and
+            // "._:/#-" (no spaces), so item names with spaces need an entry
+            // here mapping a valid id to the real item name.
+            "openai-api": "OpenAI API",
+            "gemini-api": "Gemini API",
+            "telegram-bot-token": "Telegram bot token",
+          },
         },
       },
     },
@@ -55,6 +63,8 @@ Verify with `op whoami` from the gateway host.
   },
 }
 ```
+
+`secrets.defaults.exec: "onepassword"` makes `onepassword` the default *provider* for any SecretRef with `source: "exec"` — SecretRef `source` is the generic provider kind (`exec`, `env`, `file`, ...), not a specific provider name, so refs still say `source: "exec"`, never `source: "onepassword"`. If you'd rather not rely on the default (e.g. you run more than one exec provider), name it explicitly instead: `{ source: "exec", provider: "onepassword", id: "..." }`.
 
 2. Replace your inline `op read` providers with SecretRefs:
 
@@ -81,10 +91,10 @@ Verify with `op whoami` from the gateway host.
   models: {
     providers: {
       openai: {
-        apiKey: { source: "exec", id: "OpenAI API" },
+        apiKey: { source: "exec", id: "openai-api" },
       },
       google: {
-        apiKey: { source: "exec", id: "Gemini API" },
+        apiKey: { source: "exec", id: "gemini-api" },
       },
       // etc.
     },
@@ -93,7 +103,7 @@ Verify with `op whoami` from the gateway host.
     telegram: {
       accounts: {
         default: {
-          botToken: { source: "exec", id: "Telegram bot token" },
+          botToken: { source: "exec", id: "telegram-bot-token" },
         },
       },
     },
@@ -101,29 +111,37 @@ Verify with `op whoami` from the gateway host.
 }
 ```
 
-The `id` maps to a 1Password item in your vault. The resolver builds the full reference as:
+The `id` must match OpenClaw's SecretRef id pattern (letters, digits, `._:/#-`, no spaces). The resolver looks it up in `plugins.entries.onepassword.config.items` to get the real 1Password item name (or falls back to using the id verbatim as the item name, if it isn't in `items` — handy when your item names already happen to be valid ids). It then builds the full reference as:
 
 ```
-op://<vault>/<id>/<field>
+op://<vault>/<item name>/<field>
 ```
 
-If the `id` already contains slashes (e.g. `OpenAI API/credential`), it's used as the full item path within the vault — the configured `field` is only appended when the id is a plain item name.
+If the resolved item name already contains slashes (e.g. `OpenAI API/credential`), it's used as the full item path within the vault — the configured `field` is only appended when it's a plain item name.
+
+`field` in the plugin config is the vault-wide default, but you can override it per secret by including the field in the `items` entry itself:
+
+```json5
+items: {
+  "stripe-key": "Stripe API/token",  // this one secret reads the "token" field, not the default "credential"
+}
+```
 
 ## How it works
 
 OpenClaw's exec provider protocol supports batching. The resolver:
 
 1. Receives a JSON request on stdin with all requested `ids`
-2. Maps each id to a 1Password reference via `op://<vault>/<id>/<field>`
+2. Resolves each id to a 1Password item name via `config.items` (falling back to the id itself), then maps it to a reference via `op://<vault>/<item name>/<field>`
 3. Calls `op read --no-newline` for each (sequential — `op` has no batch-read)
 4. Returns a JSON response on stdout with all resolved values
 
 ```json5
 // stdin
-{"protocolVersion":1,"provider":"onepassword","ids":["OpenAI API","Gemini API","Brave search"]}
+{"protocolVersion":1,"provider":"onepassword","ids":["openai-api","gemini-api","brave-search"]}
 
 // stdout
-{"protocolVersion":1,"values":{"OpenAI API":"sk-...","Gemini API":"...","Brave search":"..."}}
+{"protocolVersion":1,"values":{"openai-api":"sk-...","gemini-api":"...","brave-search":"..."}}
 ```
 
 Per-id errors are returned as `errors` entries without aborting the whole batch.
