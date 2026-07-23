@@ -64,7 +64,7 @@ Verify with `op whoami` from the gateway host.
 }
 ```
 
-`secrets.defaults.exec: "onepassword"` makes `onepassword` the default *provider* for any SecretRef with `source: "exec"` — SecretRef `source` is the generic provider kind (`exec`, `env`, `file`, ...), not a specific provider name, so refs still say `source: "exec"`, never `source: "onepassword"`. If you'd rather not rely on the default (e.g. you run more than one exec provider), name it explicitly instead: `{ source: "exec", provider: "onepassword", id: "..." }`.
+`secrets.defaults.exec: "onepassword"` makes `onepassword` the default provider for `source: "exec"` refs (see [SecretRef docs](https://docs.openclaw.ai/gateway/security) for how `source`/`provider`/`defaults` interact). To name it explicitly instead: `{ source: "exec", provider: "onepassword", id: "..." }`.
 
 2. Replace your inline `op read` providers with SecretRefs:
 
@@ -111,19 +111,13 @@ Verify with `op whoami` from the gateway host.
 }
 ```
 
-The `id` must match OpenClaw's SecretRef id pattern (letters, digits, `._:/#-`, no spaces). The resolver looks it up in `plugins.entries.onepassword.config.items` to get the real 1Password item name (or falls back to using the id verbatim as the item name, if it isn't in `items` — handy when your item names already happen to be valid ids). It then builds the full reference as:
+`id` must match OpenClaw's [SecretRef id pattern](https://docs.openclaw.ai/gateway/security) (letters, digits, `._:/#-`, no spaces) — since 1Password item names often don't, the resolver looks `id` up in `items` to get the real item name, falling back to the id verbatim if there's no entry. It then builds the reference as `op://<vault>/<item name>/<field>`.
 
-```
-op://<vault>/<item name>/<field>
-```
-
-If the resolved item name already contains slashes (e.g. `OpenAI API/credential`), it's used as the full item path within the vault — the configured `field` is only appended when it's a plain item name.
-
-`field` in the plugin config is the vault-wide default, but you can override it per secret by including the field in the `items` entry itself:
+An `items` entry can include a section/field path to override the vault-wide default `field` for just that one secret:
 
 ```json5
 items: {
-  "stripe-key": "Stripe API/token",  // this one secret reads the "token" field, not the default "credential"
+  "stripe-key": "Stripe API/token",  // reads the "token" field, not the default "credential"
 }
 ```
 
