@@ -111,22 +111,14 @@ Verify with `op whoami` from the gateway host.
 }
 ```
 
-`id` must match OpenClaw's [SecretRef id pattern](https://docs.openclaw.ai/gateway/security) (letters, digits, `._:/#-`, no spaces) — since 1Password item names often don't, the resolver looks `id` up in `items` to get the real item name, falling back to the id verbatim if there's no entry. It then builds the reference as `op://<vault>/<item name>/<field>`.
-
-An `items` entry can include a section/field path to override the vault-wide default `field` for just that one secret:
-
-```json5
-items: {
-  "stripe-key": "Stripe API/token",  // reads the "token" field, not the default "credential"
-}
-```
+`id` must match OpenClaw's [SecretRef id pattern](https://docs.openclaw.ai/gateway/security) (letters, digits, `._:/#-`, no spaces), which real 1Password item names often don't. `items` maps each id to its item name in the configured vault; the reference is always built as `op://<vault>/<item name>/<field>`. Every id you reference needs an `items` entry.
 
 ## How it works
 
 OpenClaw's exec provider protocol supports batching. The resolver:
 
 1. Receives a JSON request on stdin with all requested `ids`
-2. Resolves each id to a 1Password item name via `config.items` (falling back to the id itself), then maps it to a reference via `op://<vault>/<item name>/<field>`
+2. Looks up each id's item name in `config.items` and builds a reference: `op://<vault>/<item name>/<field>`
 3. Calls `op read --no-newline` for each (sequential — `op` has no batch-read)
 4. Returns a JSON response on stdout with all resolved values
 

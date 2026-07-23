@@ -19,7 +19,7 @@
       "items": {
         "type": "object",
         "additionalProperties": { "type": "string" },
-        "description": "Maps a SecretRef id to the real 1Password item name (or item/section/field path). OpenClaw restricts SecretRef ids to letters, digits, and '._:/#-' (no spaces), so item names containing spaces or other disallowed characters need an entry here, e.g. { \"brave-search\": \"Brave search\" }. Ids without an entry are used as the item name verbatim."
+        "description": "Maps each SecretRef id to its 1Password item name in the configured vault, e.g. { \"brave-search\": \"Brave search\" }. Required for every id referenced: OpenClaw restricts SecretRef ids to letters, digits, and '._:/#-' (no spaces), so item names commonly aren't valid ids on their own."
       }
     }
   },

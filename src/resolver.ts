@@ -6,13 +6,11 @@
  *   stdout: { "protocolVersion": 1, "values": { "id1": "...", "id2": "..." },
  *             "errors": { "idX": { "message": "..." } } }
  *
- * Each SecretRef id maps to a 1Password reference:
- *   op://<vault>/<id>/<field>
- *
+ * Each SecretRef id is looked up in config.items to get the real 1Password
+ * item name, then mapped to a reference: op://<vault>/<item name>/<field>.
  * OpenClaw restricts SecretRef ids to /^[A-Za-z0-9][A-Za-z0-9._:/#-]{0,255}$/
- * (no spaces), while 1Password item names commonly contain spaces. When an
- * item name isn't itself a valid id, map a valid id to the real item name via
- * config.items (e.g. { "brave-search": "Brave search" }).
+ * (no spaces), while 1Password item names commonly contain spaces — so
+ * config.items is required, mapping every id used to its real item name.
  *
  * Config is injected by the OpenClaw plugin host via environment variable
  * OPENCLAW_PLUGIN_CONFIG as JSON.
@@ -64,22 +62,13 @@ function loadConfig(): PluginConfig {
   }
 }
 
-function buildOpRef(config: PluginConfig, id: string): string {
-  const vault = config.vault.startsWith("op://") ? config.vault.slice(5) : config.vault;
-  // config.items maps a valid SecretRef id to the real 1Password item name
-  // (needed whenever the item name itself isn't a valid id, e.g. it has
-  // spaces). Falls back to using the id verbatim as the item name/path.
-  const target = config.items[id] ?? id;
-  // The target can contain slashes (e.g. "OpenAI/credential"). If it already
-  // looks like a full 1Password path (contains a second segment like
-  // "item/section/field"), use it as-is; otherwise append /<field>.
-  const segments = target.split("/").filter(Boolean);
-  if (segments.length >= 2) {
-    // target already includes item and section/field — use directly
-    return `op://${vault}/${target}`;
+function buildOpRef(config: PluginConfig, id: string): string | { error: string } {
+  const itemName = config.items[id];
+  if (!itemName) {
+    return { error: `no config.items entry for id "${id}"` };
   }
-  // target is just the item name — append config.field
-  return `op://${vault}/${target}/${config.field}`;
+  const vault = config.vault.startsWith("op://") ? config.vault.slice(5) : config.vault;
+  return `op://${vault}/${itemName}/${config.field}`;
 }
 
 function readStdinSync(): string {
@@ -145,6 +134,10 @@ function main(): void {
 
   for (const id of request.ids) {
     const opRef = buildOpRef(config, id);
+    if (typeof opRef !== "string") {
+      errors[id] = { message: opRef.error };
+      continue;
+    }
     const result = readOpSecret(opRef);
     if (typeof result === "string") {
       values[id] = result;
