@@ -6,14 +6,20 @@
  *   stdout: { "protocolVersion": 1, "values": { "id1": "...", "id2": "..." },
  *             "errors": { "idX": { "message": "..." } } }
  *
- * Each SecretRef id is looked up in config.items to get the real 1Password
- * item name, then mapped to a reference: op://<vault>/<item name>/<field>.
- * OpenClaw restricts SecretRef ids to /^[A-Za-z0-9][A-Za-z0-9._:/#-]{0,255}$/
- * (no spaces), while 1Password item names commonly contain spaces — so
- * config.items is required, mapping every id used to its real item name.
+ * Each SecretRef id IS a complete 1Password reference (op://vault/item/field)
+ * — the resolver passes it straight to `op read`. OpenClaw restricts
+ * SecretRef ids to /^[A-Za-z0-9][A-Za-z0-9._:/#-]{0,255}$/ (no spaces), while
+ * 1Password item names commonly contain spaces, so the vault/item segments
+ * should use their 1Password UUIDs (always alphanumeric, e.g. copy them from
+ * `op vault list --format=json` / `op item list --format=json`) rather than
+ * their display names wherever those contain disallowed characters.
  *
- * Config is injected by the OpenClaw plugin host via environment variable
- * OPENCLAW_PLUGIN_CONFIG as JSON.
+ * There's deliberately no plugin-level config (vault/field/etc.): OpenClaw
+ * has no channel for delivering a plugin's own config to a spawned
+ * secretProviderIntegration process (confirmed against both the OpenClaw
+ * 2026.7.1 source and its docs — only static, manifest-authored env/passEnv
+ * pass through, never plugins.entries.<id>.config), so folding vault/field
+ * into the id itself avoids needing one at all.
  */
 
 import { spawnSync } from "node:child_process";
@@ -31,44 +37,13 @@ interface ProtocolResponse {
   errors?: Record<string, { message: string }>;
 }
 
-interface PluginConfig {
-  vault: string;
-  field: string;
-  items: Record<string, string>;
-}
-
-function loadConfig(): PluginConfig {
-  const raw = process.env.OPENCLAW_PLUGIN_CONFIG;
-  if (!raw) {
-    process.stderr.write("onepassword resolver: OPENCLAW_PLUGIN_CONFIG is not set\n");
-    process.exit(1);
-  }
-  try {
-    const config = JSON.parse(raw) as Partial<PluginConfig>;
-    if (!config.vault || typeof config.vault !== "string") {
-      process.stderr.write("onepassword resolver: config.vault is required\n");
-      process.exit(1);
-    }
+function toOpRef(id: string): string | { error: string } {
+  if (!id.startsWith("op://")) {
     return {
-      vault: config.vault,
-      field: config.field || "credential",
-      items: config.items && typeof config.items === "object" ? config.items : {},
+      error: `id must be a complete 1Password reference (op://vault/item/field), got "${id}"`,
     };
-  } catch (err) {
-    process.stderr.write(
-      `onepassword resolver: failed to parse OPENCLAW_PLUGIN_CONFIG: ${err instanceof Error ? err.message : err}\n`,
-    );
-    process.exit(1);
   }
-}
-
-function buildOpRef(config: PluginConfig, id: string): string | { error: string } {
-  const itemName = config.items[id];
-  if (!itemName) {
-    return { error: `no config.items entry for id "${id}"` };
-  }
-  const vault = config.vault.startsWith("op://") ? config.vault.slice(5) : config.vault;
-  return `op://${vault}/${itemName}/${config.field}`;
+  return id;
 }
 
 function readStdinSync(): string {
@@ -126,14 +101,13 @@ function readOpSecret(opRef: string): string | { error: string } {
 }
 
 function main(): void {
-  const config = loadConfig();
   const request = parseRequest(readStdinSync());
 
   const values: Record<string, string> = {};
   const errors: Record<string, { message: string }> = {};
 
   for (const id of request.ids) {
-    const opRef = buildOpRef(config, id);
+    const opRef = toOpRef(id);
     if (typeof opRef !== "string") {
       errors[id] = { message: opRef.error };
       continue;

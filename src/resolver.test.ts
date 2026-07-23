@@ -9,44 +9,26 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-function buildOpRef(
-  config: { vault: string; field: string; items: Record<string, string> },
-  id: string,
-): string | { error: string } {
-  const itemName = config.items[id];
-  if (!itemName) {
-    return { error: `no config.items entry for id "${id}"` };
+function toOpRef(id: string): string | { error: string } {
+  if (!id.startsWith("op://")) {
+    return {
+      error: `id must be a complete 1Password reference (op://vault/item/field), got "${id}"`,
+    };
   }
-  const vault = config.vault.startsWith("op://") ? config.vault.slice(5) : config.vault;
-  return `op://${vault}/${itemName}/${config.field}`;
+  return id;
 }
 
-describe("buildOpRef", () => {
-  const config = {
-    vault: "Openclaw",
-    field: "credential",
-    items: { "brave-search": "Brave search" },
-  };
-
-  it("maps id to its item name via config.items", () => {
-    expect(buildOpRef(config, "brave-search")).toBe("op://Openclaw/Brave search/credential");
-  });
-
-  it("handles op:// prefix in vault config", () => {
-    expect(buildOpRef({ ...config, vault: "op://Openclaw" }, "brave-search")).toBe(
-      "op://Openclaw/Brave search/credential",
+describe("toOpRef", () => {
+  it("passes a complete op:// reference through unchanged", () => {
+    expect(toOpRef("op://Openclaw/aabbccddeeffgghh11223344mm/credential")).toBe(
+      "op://Openclaw/aabbccddeeffgghh11223344mm/credential",
     );
   });
 
-  it("handles custom field", () => {
-    expect(buildOpRef({ ...config, field: "password" }, "brave-search")).toBe(
-      "op://Openclaw/Brave search/password",
-    );
-  });
-
-  it("returns an error for an id with no items entry", () => {
-    expect(buildOpRef(config, "unmapped-id")).toEqual({
-      error: 'no config.items entry for id "unmapped-id"',
+  it("rejects an id that isn't a complete reference", () => {
+    expect(toOpRef("brave-search")).toEqual({
+      error:
+        'id must be a complete 1Password reference (op://vault/item/field), got "brave-search"',
     });
   });
 });
