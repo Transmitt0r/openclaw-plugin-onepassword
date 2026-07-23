@@ -38,11 +38,11 @@ describe("manifest structure", () => {
     const manifest = JSON.parse(
       readFileSync(resolve(__dirname, "..", "openclaw.plugin.json"), "utf8"),
     );
-    expect(manifest.contracts.secretProviderIntegrations).toBeDefined();
-    expect(manifest.contracts.secretProviderIntegrations["secret-store"]).toBeDefined();
-    expect(manifest.contracts.secretProviderIntegrations["secret-store"].jsonOnly).toBe(true);
+    expect(manifest.secretProviderIntegrations).toBeDefined();
+    expect(manifest.secretProviderIntegrations["secret-store"]).toBeDefined();
+    expect(manifest.secretProviderIntegrations["secret-store"].jsonOnly).toBe(true);
     // biome-ignore lint/suspicious/noTemplateCurlyInString: testing literal `${node}` manifest value
-    expect(manifest.contracts.secretProviderIntegrations["secret-store"].command).toBe("${node}");
+    expect(manifest.secretProviderIntegrations["secret-store"].command).toBe("${node}");
   });
 });
 
