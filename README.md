@@ -130,9 +130,4 @@ Per-id errors are returned as `errors` entries without aborting the whole batch.
 
 ## Development
 
-```bash
-pnpm install
-pnpm run build
-pnpm run test
-pnpm run lint
-```
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for dev setup, commit conventions, and how releases work.

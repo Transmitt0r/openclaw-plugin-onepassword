@@ -1,6 +1,6 @@
 {
   "name": "@transmitt0r/openclaw-plugin-onepassword",
-  "version": "0.1.0",
+  "version": "0.0.0-development",
   "description": "OpenClaw plugin — 1Password secret provider integration",
   "type": "module",
   "license": "MIT",
@@ -43,7 +43,8 @@
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "test": "vitest run",
-    "prepublishOnly": "pnpm run build && pnpm run test"
+    "prepublishOnly": "pnpm run build && pnpm run test",
+    "release": "semantic-release"
   },
   "peerDependencies": {
     "openclaw": ">=2026.7.0"
@@ -51,6 +52,7 @@
   "devDependencies": {
     "@biomejs/biome": "^2.5.4",
     "@types/node": "^26.1.1",
+    "semantic-release": "^25.0.8",
     "typescript": "7.0.2",
     "vitest": "^4.1.10"
   }
