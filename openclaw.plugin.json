@@ -5,23 +5,13 @@
   "version": "0.1.0",
   "configSchema": {
     "type": "object",
-    "required": ["vault"],
-    "properties": {
-      "vault": {
-        "type": "string",
-        "description": "1Password vault name to read secrets from, e.g. 'Openclaw'"
-      },
-      "field": {
-        "type": "string",
-        "description": "Field name within each item to read (default: 'credential')",
-        "default": "credential"
-      }
-    }
+    "additionalProperties": false,
+    "properties": {}
   },
   "secretProviderIntegrations": {
     "secret-store": {
       "displayName": "1Password",
-      "description": "Reads secrets from 1Password vaults using the op CLI. SecretRef ids are mapped to 1Password items: op://<vault>/<id>/<field>.",
+      "description": "Reads secrets from 1Password vaults using the op CLI. Each SecretRef id must be a complete op://vault/item/field reference.",
       "source": "exec",
       "command": "${node}",
       "args": ["./dist/resolver.js"],

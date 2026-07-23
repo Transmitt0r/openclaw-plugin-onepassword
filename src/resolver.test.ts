@@ -9,42 +9,27 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-function buildOpRef(config: { vault: string; field: string }, id: string): string {
-  const vault = config.vault.startsWith("op://") ? config.vault.slice(5) : config.vault;
-  const segments = id.split("/").filter(Boolean);
-  if (segments.length >= 2) {
-    return `op://${vault}/${id}`;
+function toOpRef(id: string): string | { error: string } {
+  if (!id.startsWith("op://")) {
+    return {
+      error: `id must be a complete 1Password reference (op://vault/item/field), got "${id}"`,
+    };
   }
-  return `op://${vault}/${id}/${config.field}`;
+  return id;
 }
 
-describe("buildOpRef", () => {
-  const config = { vault: "Openclaw", field: "credential" };
-
-  it("appends field for plain item names", () => {
-    expect(buildOpRef(config, "OpenAI API")).toBe("op://Openclaw/OpenAI API/credential");
-  });
-
-  it("uses id as-is when it already contains sections", () => {
-    expect(buildOpRef(config, "OpenAI API/credential")).toBe("op://Openclaw/OpenAI API/credential");
-  });
-
-  it("handles op:// prefix in vault config", () => {
-    expect(buildOpRef({ vault: "op://Openclaw", field: "credential" }, "Brave search")).toBe(
-      "op://Openclaw/Brave search/credential",
+describe("toOpRef", () => {
+  it("passes a complete op:// reference through unchanged", () => {
+    expect(toOpRef("op://Openclaw/aabbccddeeffgghh11223344mm/credential")).toBe(
+      "op://Openclaw/aabbccddeeffgghh11223344mm/credential",
     );
   });
 
-  it("handles custom field", () => {
-    expect(buildOpRef({ vault: "Openclaw", field: "password" }, "Some item")).toBe(
-      "op://Openclaw/Some item/password",
-    );
-  });
-
-  it("handles empty field for multi-segment ids", () => {
-    expect(buildOpRef({ vault: "Openclaw", field: "" }, "Deep/Path/Field")).toBe(
-      "op://Openclaw/Deep/Path/Field",
-    );
+  it("rejects an id that isn't a complete reference", () => {
+    expect(toOpRef("brave-search")).toEqual({
+      error:
+        'id must be a complete 1Password reference (op://vault/item/field), got "brave-search"',
+    });
   });
 });
 

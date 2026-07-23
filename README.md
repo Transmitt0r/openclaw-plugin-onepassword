@@ -5,7 +5,7 @@
 
 An [OpenClaw](https://docs.openclaw.ai) plugin that provides a **1Password secret provider integration** — batch-resolution of secrets from your vaults via the `op` CLI.
 
-Instead of defining a separate exec provider for every 1Password secret (6+ cold `op` starts at startup), this plugin registers one batched provider that maps SecretRef ids to 1Password items. OpenClaw sends all ids in one stdin request, the resolver calls `op read` for each in sequence, and returns all resolved values in one stdout response.
+Instead of defining a separate exec provider for every 1Password secret (6+ cold `op` starts at startup), this plugin registers one batched provider that resolves complete `op://` references. OpenClaw sends all ids in one stdin request, the resolver calls `op read` for each in sequence, and returns all resolved values in one stdout response.
 
 ## Install
 
@@ -25,18 +25,13 @@ Verify with `op whoami` from the gateway host.
 
 ## Configure
 
-1. Register the plugin and provider:
+1. Register the plugin and provider — no plugin config needed:
 
 ```json5
 {
   plugins: {
     entries: {
-      onepassword: {
-        config: {
-          vault: "Openclaw",  // 1Password vault name
-          // field: "credential"  // default, omit unless you use a different field name
-        },
-      },
+      onepassword: { enabled: true },
     },
   },
   secrets: {
@@ -56,7 +51,9 @@ Verify with `op whoami` from the gateway host.
 }
 ```
 
-2. Replace your inline `op read` providers with SecretRefs:
+`secrets.defaults.exec: "onepassword"` makes `onepassword` the default provider for `source: "exec"` refs (see [SecretRef docs](https://docs.openclaw.ai/gateway/security) for how `source`/`provider`/`defaults` interact). To name it explicitly instead: `{ source: "exec", provider: "onepassword", id: "..." }`.
+
+2. Replace your inline `op read` providers with SecretRefs whose `id` is a complete 1Password reference:
 
 **Before (6 exec providers):**
 
@@ -81,10 +78,10 @@ Verify with `op whoami` from the gateway host.
   models: {
     providers: {
       openai: {
-        apiKey: { source: "exec", id: "OpenAI API" },
+        apiKey: { source: "exec", id: "op://Openclaw/a1b2c3d4e5f6g7h8i9j0k1l2m3/credential" },
       },
       google: {
-        apiKey: { source: "exec", id: "Gemini API" },
+        apiKey: { source: "exec", id: "op://Openclaw/n4o5p6q7r8s9t0u1v2w3x4y5z6/credential" },
       },
       // etc.
     },
@@ -93,7 +90,7 @@ Verify with `op whoami` from the gateway host.
     telegram: {
       accounts: {
         default: {
-          botToken: { source: "exec", id: "Telegram bot token" },
+          botToken: { source: "exec", id: "op://Openclaw/aabbccddeeffgghh11223344mm/credential" },
         },
       },
     },
@@ -101,32 +98,31 @@ Verify with `op whoami` from the gateway host.
 }
 ```
 
-The `id` maps to a 1Password item in your vault. The resolver builds the full reference as:
+`id` must match OpenClaw's [SecretRef id pattern](https://docs.openclaw.ai/gateway/security) (letters, digits, `._:/#-`, no spaces). A plain `op://<vault name>/<item name>/<field>` reference usually violates that, since item (and sometimes vault) names contain spaces — so use 1Password's item ID instead of its display name for whichever segment needs it. Item IDs are plain alphanumeric strings, always valid. List them with:
 
-```
-op://<vault>/<id>/<field>
+```bash
+op item list --vault Openclaw --format=json | jq -r '.[] | "\(.id)  \(.title)"'
 ```
 
-If the `id` already contains slashes (e.g. `OpenAI API/credential`), it's used as the full item path within the vault — the configured `field` is only appended when the id is a plain item name.
+There's no plugin-level config (no `vault`/`field`/`items` to set up): OpenClaw doesn't give a `secretProviderIntegration` process any channel to receive a plugin's own config (`plugins.entries.<id>.config`) at all — only static, manifest-authored `env`/`passEnv` reach it. Folding vault/item/field into the id itself sidesteps needing one.
 
 ## How it works
 
 OpenClaw's exec provider protocol supports batching. The resolver:
 
 1. Receives a JSON request on stdin with all requested `ids`
-2. Maps each id to a 1Password reference via `op://<vault>/<id>/<field>`
-3. Calls `op read --no-newline` for each (sequential — `op` has no batch-read)
-4. Returns a JSON response on stdout with all resolved values
+2. Passes each id straight to `op read --no-newline` (sequential — `op` has no batch-read)
+3. Returns a JSON response on stdout with all resolved values
 
 ```json5
 // stdin
-{"protocolVersion":1,"provider":"onepassword","ids":["OpenAI API","Gemini API","Brave search"]}
+{"protocolVersion":1,"provider":"onepassword","ids":["op://Openclaw/a1b2c3d4e5f6g7h8i9j0k1l2m3/credential"]}
 
 // stdout
-{"protocolVersion":1,"values":{"OpenAI API":"sk-...","Gemini API":"...","Brave search":"..."}}
+{"protocolVersion":1,"values":{"op://Openclaw/a1b2c3d4e5f6g7h8i9j0k1l2m3/credential":"sk-..."}}
 ```
 
-Per-id errors are returned as `errors` entries without aborting the whole batch.
+Per-id errors (including an id that isn't a complete `op://` reference) are returned as `errors` entries without aborting the whole batch.
 
 ## Development
 
