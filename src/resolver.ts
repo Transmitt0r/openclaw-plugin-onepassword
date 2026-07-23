@@ -14,7 +14,6 @@
  */
 
 import { spawnSync } from "node:child_process";
-import { readSync } from "node:fs";
 
 interface ProtocolRequest {
   protocolVersion: number;
@@ -72,20 +71,16 @@ function buildOpRef(config: PluginConfig, id: string): string {
   return `op://${vault}/${id}/${config.field}`;
 }
 
-function readStdinSync(): string {
-  // exec provider protocol: request arrives as a single write on stdin.
-  // Use synchronous fd read because the pipe is closed after one write.
+async function readStdin(): Promise<string> {
+  // Async iteration is the standard, backpressure-safe way to drain a
+  // readable stream to EOF. A prior version used a hand-rolled synchronous
+  // readSync() loop on process.stdin.fd, which is fragile for pipes: a
+  // non-blocking pipe fd can throw EAGAIN mid-write before the parent has
+  // finished sending the request, and the loop's catch-all treated that as
+  // "done," silently truncating the JSON payload and crashing on parse.
   const chunks: Buffer[] = [];
-  try {
-    const fd = process.stdin.fd;
-    const buf = Buffer.alloc(65536);
-    let bytesRead = readSync(fd, buf, 0, buf.length, null);
-    while (bytesRead > 0) {
-      chunks.push(Buffer.from(buf.subarray(0, bytesRead)));
-      bytesRead = readSync(fd, buf, 0, buf.length, null);
-    }
-  } catch {
-    // stdin may already be closed (no data), which is fine for 0 ids
+  for await (const chunk of process.stdin) {
+    chunks.push(chunk as Buffer);
   }
   return Buffer.concat(chunks).toString("utf8").trim() || "{}";
 }
@@ -126,9 +121,9 @@ function readOpSecret(opRef: string): string | { error: string } {
   return { error: stderr };
 }
 
-function main(): void {
+async function main(): Promise<void> {
   const config = loadConfig();
-  const request = parseRequest(readStdinSync());
+  const request = parseRequest(await readStdin());
 
   const values: Record<string, string> = {};
   const errors: Record<string, { message: string }> = {};
@@ -150,4 +145,9 @@ function main(): void {
   });
 }
 
-main();
+main().catch((err) => {
+  process.stderr.write(
+    `onepassword resolver: unhandled error: ${err instanceof Error ? err.message : err}\n`,
+  );
+  process.exit(1);
+});
