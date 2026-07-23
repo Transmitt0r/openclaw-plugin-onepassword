@@ -18,18 +18,16 @@
       }
     }
   },
-  "contracts": {
-    "secretProviderIntegrations": {
-      "secret-store": {
-        "displayName": "1Password",
-        "description": "Reads secrets from 1Password vaults using the op CLI. SecretRef ids are mapped to 1Password items: op://<vault>/<id>/<field>.",
-        "source": "exec",
-        "command": "${node}",
-        "args": ["./dist/resolver.js"],
-        "passEnv": ["HOME", "OP_SERVICE_ACCOUNT_TOKEN", "PATH"],
-        "jsonOnly": true,
-        "timeoutMs": 15000
-      }
+  "secretProviderIntegrations": {
+    "secret-store": {
+      "displayName": "1Password",
+      "description": "Reads secrets from 1Password vaults using the op CLI. SecretRef ids are mapped to 1Password items: op://<vault>/<id>/<field>.",
+      "source": "exec",
+      "command": "${node}",
+      "args": ["./dist/resolver.js"],
+      "passEnv": ["HOME", "OP_SERVICE_ACCOUNT_TOKEN", "PATH"],
+      "jsonOnly": true,
+      "timeoutMs": 15000
     }
   }
 }
